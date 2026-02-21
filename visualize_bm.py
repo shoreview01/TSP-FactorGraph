@@ -249,6 +249,8 @@ def main():
                         help='time window 제약 조건 추가 (일부 도시에 무작위 제약)')
     parser.add_argument('--constraint-ratio', type=float, default=0.3,
                         help='제약할 도시 비율 (기본 30%%)')
+    parser.add_argument('--beam', type=int, default=None,
+                        help='Beam width (None=exact, 정수=beam search)')
     args = parser.parse_args()
 
     np.random.seed(args.seed)
@@ -288,6 +290,7 @@ def main():
         seed=args.seed,
         device=args.device,
         constraints=constraints,
+        beam_width=args.beam,
     )
 
     route, cost = solver.run(record_history=True)
@@ -301,7 +304,35 @@ def main():
     else:
         history['constraint_mask'] = None
 
-    print(f"\nFinal: cost={cost:.6f}, route={route}")
+    print(f"\n{'='*60}")
+    print(f"  [BM]    cost={cost:.6f}  route={'→'.join(str(c) for c in route)}")
+
+    # ── Exact baseline 비교 (beam 모드에서는 건너뜀) ──
+    if constraints is not None and solver.has_constraints and args.beam is None:
+        exact_route, exact_cost = solver.solve_exact_constrained()
+        match = "✓ 최적" if abs(cost - exact_cost) < 1e-6 else \
+                f"✗ gap {(cost-exact_cost)/exact_cost*100:+.2f}%"
+        print(f"  [Exact] cost={exact_cost:.6f}  route={'→'.join(str(c) for c in exact_route)}")
+        print(f"  BM vs Exact Constrained: {match}")
+
+    # ── 무제약 baseline ──
+    solver_unc = TSPFactorGraphSolverGPU(
+        D, start_city=0,
+        damping=args.damping,
+        iters=args.iters,
+        verbose=False,
+        patience=args.patience,
+        seed=args.seed,
+        device=args.device,
+        beam_width=args.beam,
+    )
+    unc_route, unc_cost = solver_unc.run()
+    print(f"  [Uncon] cost={unc_cost:.6f}  route={'→'.join(str(c) for c in unc_route)}")
+    if constraints is not None:
+        print(f"  Constraint overhead: {(cost-unc_cost)/unc_cost*100:+.2f}%")
+    solver_unc.cleanup()
+    print(f"{'='*60}")
+
     print(f"Total iterations recorded: {len(history['cost'])}")
 
     if args.save:

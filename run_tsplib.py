@@ -331,6 +331,10 @@ def main():
     parser.add_argument('--gif', action='store_true',
                         help='GIF 애니메이션 저장')
 
+    # Beam search
+    parser.add_argument('--beam', type=int, default=None,
+                        help='Beam width (None=exact, 정수=beam search)')
+
     args = parser.parse_args()
 
     # ── 파일 파싱 ──
@@ -395,6 +399,7 @@ def main():
         seed=args.seed,
         device=args.device,
         constraints=constraints,
+        beam_width=args.beam,
     )
 
     t0 = time.time()
@@ -405,15 +410,33 @@ def main():
     print(f"\n{'='*60}")
     print(f"  Result: {tsp['name']}")
     print(f"{'='*60}")
-    print(f"  Cost:    {cost:.2f}")
+    print(f"  [BM] Cost:  {cost:.2f}")
     if known_opt:
         gap = (cost - known_opt) / known_opt * 100
-        print(f"  Optimal: {known_opt}")
-        print(f"  Gap:     {gap:+.2f}%")
-    print(f"  Route:   {'→'.join(str(c) for c in route)}")
-    print(f"  Time:    {elapsed:.2f}s")
-    print(f"  Device:  {solver.device}")
-    print(f"  Iters:   {len(solver.history['cost']) if record else '?'}")
+        print(f"  Optimal (unconstrained): {known_opt}")
+        print(f"  Gap vs unconstrained:    {gap:+.2f}%")
+    print(f"  Route: {'→'.join(str(c) for c in route)}")
+    print(f"  Time:  {elapsed:.2f}s")
+
+    # ── 제약 있으면 exact constrained baseline과 비교 (beam 모드 제외) ──
+    if constraints is not None and args.beam is None:
+        print(f"\n  --- Exact Constrained Baseline (BM 없이) ---")
+        t1 = time.time()
+        exact_route, exact_cost = solver.solve_exact_constrained()
+        t_exact = time.time() - t1
+
+        print(f"  [Exact] Cost:  {exact_cost:.2f}")
+        print(f"  [Exact] Route: {'→'.join(str(c) for c in exact_route)}")
+        print(f"  [Exact] Time:  {t_exact:.2f}s")
+
+        if abs(exact_cost) > 1e-9:
+            bm_gap = (cost - exact_cost) / exact_cost * 100
+            match = "✓ 최적" if abs(cost - exact_cost) < 1e-6 else f"✗ gap {bm_gap:+.2f}%"
+            print(f"\n  BM vs Exact: {match}")
+            print(f"    BM={cost:.4f}  Exact={exact_cost:.4f}")
+
+    print(f"\n  Device: {solver.device}")
+    print(f"  Iters:  {len(solver.history['cost']) if record else '?'}")
 
     # ── 시각화 ──
     if record:
