@@ -1,293 +1,148 @@
-# TSP Factor-Graph Message-Passing Solver (GPU)
+# Coupled CAP–Trellis Message Passing — 성북구 쓰레기 수거 실험
 
-논문의 Factor-Graph BP 알고리즘을 PyTorch GPU 가속으로 구현한 솔버 + 벤치마크 + BM 메시지 시각화 도구.
+논문 **Sec. III (Coupled CAP-Trellis Message Passing, Algorithm 1)** 의 구현과
+**Sec. IV** 의 실험 4종. 용량 제약 쓰레기 수거 문제에서, 용량 인지 클러스터링
+(CAP)과 exact trellis 라우팅(Held-Karp min-sum)이 bridging 메시지 δ̃ 로 양방향
+결합되어 {b_ij} 고정점까지 서로를 되먹인다. edge pruning·beam·heuristic
+fallback 은 쓰지 않는다.
+
+```
+성북구 도로거리행렬 (84노드, data/seongbuk.csv)
+   → [라운드 r]  CAP (용량 Q, δ̃ 주입)   ─ Pareto-frontier knapsack 을 φ̃ 메시지에 내장
+              → 활성 exemplar {j : b_jj = 1},  후보 V^cand_k = {i : ρ̃_i > τ}
+              → 클러스터별 trellis leave-one-out  → δ̃  (unmasked 1회 + masked pass)
+              → {b_ij} 불변이면 종료 (Algorithm 1)
+   → 클러스터마다 exact trellis TSP     ─ exemplar = 지역 depot, 차량 1대 최적 경로
+```
+
+## 실행 환경
+
+모든 스크립트는 conda env **`tsp`** 의 python 으로 실행한다
+(osmnx·networkx·torch·matplotlib·geopandas·pypdfium2):
+
+```powershell
+& "C:\Users\guild\.conda\envs\tsp\python.exe" <script.py> [옵션]
+```
 
 ## 파일 구성
 
-| 파일 | 설명 |
-|------|------|
-| `tsp_factor_graph_gpu.py` | GPU 가속 솔버 (Exact DP + Beam Search) |
-| `tsp_benchmarks.py` | 벤치마크 비교 (Held-Karp, NN, 2-opt, GA, OR-Tools) |
-| `run_tsplib.py` | TSPLIB 파일 파서 + 솔버 실행 CLI |
-| `visualize_bm.py` | BM 메시지 히트맵 시각화 (인터랙티브 / PNG / GIF) |
+### 핵심 알고리즘 (논문 Sec. III)
 
-## 설치
+| 파일 | 역할 |
+|---|---|
+| `coupled.py` | **Algorithm 1**: CAP↔trellis 결합 루프 — ρ̃(식 40)·ŝ(식 44)·δ̃(식 43+45), δ̃ damping |
+| `cap.py` | CAP max-sum 메시지 패싱 (식 37–42, bridging δ̃ 주입·warm start 지원) + 디코딩 |
+| `pareto_frontier.py` | φ̃ 메시지 내부 0/1 knapsack (Nemhauser–Ullmann frontier, Appendix A) |
+| `trellis_tsp.py` | exact trellis TSP — Held-Karp min-sum, torch/GPU, pruning·fallback 없음 |
+| `benchmarks.py` | 비교 라우팅: brute force / nearest-neighbor / GA (pop 100, 500세대, OX+swap) — 폐투어·open-path 겸용 |
+| `run.py` | Algorithm 1 단독 드라이버 (`--compare` 로 BF/NN 대조) + 공용 유틸(load_matrix 등) |
+| `ieee_style.py` | IEEE Transactions figure 규격 (모든 실험 공유) |
 
-```bash
-pip install torch numpy matplotlib
-pip install Pillow      # GIF 저장 시 필요
-pip install ortools     # OR-Tools 벤치마크 (선택)
+### 실험 (논문 Sec. IV) — 출력은 모두 `figs/`
+
+**Setup figure** — digital twin 구성도
+
+```powershell
+python setup_fig.py        # -> figs/fig_setup.pdf
 ```
+위성사진(physical, 고려대 캠퍼스 빨간 윤곽) 위 + 성북구 digital twin(도로망·
+경계·84 service node·고려대 윤곽) 아래, 모서리 투영 점선과 중앙 "Digital twin"
+화살표로 연결한 2단 구성.
 
-## 솔버 모드
+---
 
-| 모드 | 파라미터 | 복잡도 | N 범위 |
-|------|---------|--------|--------|
-| **Exact DP** | `beam_width=None` (기본) | O(2^N · N · T) | N ≤ 20 |
-| **Beam Search** | `beam_width=B` | O(B · N² · T) | N ≤ 63 |
+**실험 1** (`exp1_clustering.py`) — **클러스터링 기법별 용량 feasibility 지도**
 
-Exact DP는 2^N 상태를 전수 탐색하여 최적해 보장. Beam search는 각 step에서 top-B 상태만 유지하여 근사해를 빠르게 탐색.
-
-## 벤치마크 비교
-
-```bash
-# 단일 인스턴스 비교 (N=12)
-python tsp_benchmarks.py --n 12
-
-# 10 trials 평균 ± std
-python tsp_benchmarks.py --n 12 --trials 10
-
-# 제약 조건 포함
-python tsp_benchmarks.py --n 12 --constrained --trials 10
-
-# Beam search 포함 (N>20)
-python tsp_benchmarks.py --n 25 --beam 500 --trials 5
-
-# TSPLIB 파일로 벤치마크
-python tsp_benchmarks.py --tsplib ALL_tsp/gr17.tsp.gz
-
-# OR-Tools 제외
-python tsp_benchmarks.py --n 15 --no-ortools
+```powershell
+python exp1_clustering.py --capacity 40 --weights random
+# -> figs/exp1_proposed.pdf, exp1_ap.pdf, exp1_kmedoids.pdf
 ```
+proposed(CAP) vs **weighted AP** vs **weighted K-medoids** (같은 K).  비교군은
+demand-weighted 변형 — AP 는 s_w(i,k)=w_i·s(i,k) (가중 facility-location),
+K-medoids 는 가중 PAM — 으로 weight 를 유사도에 반영하되 용량 제약만 없다.
+투어 엣지는 osmnx 최단경로로 실제 도로를 따라 그려지고 feasible=초록 /
+infeasible=빨강, depot 옆 미니 막대 = load (점선 = Q).
 
-출력 예시 (10 trials):
+* 결과 (Q=40, random w∈1–9): proposed **13/13 feasible**,
+  weighted AP 9/13 (max 57), weighted K-medoids 7/13 (max 70)
+  → weight 인지만으로는 부족하고 용량의 메시지 내장이 결정적.
 
+---
+
+**실험 2** (`exp2_dynamic.py`) — **시변 수요(폭증) 하의 적응력 (클러스터링 축)**
+
+```powershell
+python exp2_dynamic.py --capacity 40 --steps 12
+# -> figs/exp2_dynamic.pdf (+ exp2_dynamic.csv)
+# 그림만 재조정: python exp2_dynamic.py --from-csv figs/exp2_dynamic.csv
 ```
-======================================================================
-  10 trials, N=12, seed=42~51
-======================================================================
+노드별 weight 가 주기적으로 변하고 steps 5–7 에서 무작위 40% 노드가 2–4배
+폭증.  매 스텝 세 기법으로 재클러스터링해 total / feasible-covered(초록) /
+infeasible(빨강) weight 를 추적 (1×3 패널, 폭증 구간 음영).
 
-Method                  Mean Cost    Time (mean ± std)     Gap (mean ± std)
---------------------------------------------------------------------------
-Held-Karp (Exact)          2.8050    0.0047s ± 0.0002s    +0.00% ±  0.00%
-FG-BP (Exact)              2.8050    0.1234s ± 0.0100s    +0.00% ±  0.00%
-FG-BP (Beam=500)           2.8312    0.0456s ± 0.0030s    +0.93% ±  0.45%
-Genetic Algorithm          2.8050    1.1059s ± 0.0207s    +0.00% ±  0.00%
-NN + 2-opt                 2.8134    0.0001s ± 0.0000s    +0.26% ±  0.52%
-Nearest Neighbor           3.0972    0.0000s ± 0.0000s    +9.98% ±  7.38%
+* 결과: 누적 infeasible — proposed **0**, weighted AP 1,127 (peak 447),
+  weighted K-medoids 1,684 (peak 427).  weighted 비교군은 평시는 감당하지만
+  폭증 구간에서 무너짐; proposed 는 차량을 11→18대로 열며 전량 수거.
+
+---
+
+**실험 3** (`exp3_routing.py`) — **라우팅 기법 성능 비교 (uniform / random)**
+
+```powershell
+python exp3_routing.py --capacity 12 --weights uniform     # 단일 실행
+python exp3_routing.py --capacity 40 --weights random      # Monte Carlo 100회
+# -> figs/exp3_cumdist.pdf
 ```
+CAP 클러스터링 고정, 클러스터 내부 + depot 간 TSP 의 solver 만
+BF / **Trellis(제안)** / NN / GA 로 교체.  매 time step 전 클러스터 차량이
+병렬로 한 노드씩 이동할 때의 누적거리 (마지막 구간 확대 inset).
+weights=random 이면 가중치 실현을 seed 마다 재추첨하는 Monte Carlo
+(평균 곡선 + min-max 구름).
 
-### 벤치마크 솔버
+* 결과 (uniform Q=12): BF = Trellis = 63,004 m (둘 다 exact, 0 mismatch),
+  GA +0.2%, NN +15.2%.
+* 결과 (random Q=40, 100 runs): BF = Proposed 75,421 ± 5,585 m (전 run 일치),
+  GA +0.7%, NN +10.9%.
 
-| 솔버 | 복잡도 | 역할 |
-|------|--------|------|
-| **Held-Karp** | O(2^N · N²) exact | Ground truth |
-| **Nearest Neighbor** | O(N²) greedy | 하한 baseline |
-| **NN + 2-opt** | O(N² · k) local search | 실용적 휴리스틱 |
-| **Genetic Algorithm** | Population-based meta | OX + Inversion + Elitism |
-| **OR-Tools** | 산업 표준 | 상한 baseline |
+---
 
-## TSPLIB 파일 풀기
+**실험 4** (`exp4_online.py`) — **랜덤 disruption 하의 online 라우팅 (Algorithm 2)**
 
-```bash
-# 기본 실행
-python run_tsplib.py ALL_tsp/gr17.tsp.gz
-
-# Beam search로 큰 인스턴스
-python run_tsplib.py ALL_tsp/att48.tsp.gz --beam 1000
-
-# 파라미터 조정
-python run_tsplib.py ALL_tsp/gr21.tsp.gz --iters 200 --damping 0.5
-
-# 매 iteration 출력
-python run_tsplib.py ALL_tsp/fri26.tsp.gz --verbose
-
-# 제약 조건 추가
-python run_tsplib.py ALL_tsp/bayg29.tsp.gz --constrained
-
-# BM 메시지 시각화
-python run_tsplib.py ALL_tsp/gr17.tsp.gz --viz
-
-# GIF 저장
-python run_tsplib.py ALL_tsp/gr17.tsp.gz --gif
+```powershell
+python exp4_online.py --capacity 12 --weights uniform      # Monte Carlo 100회 (~3h)
+# -> figs/exp4_online.pdf
 ```
+매 step 전체 노드의 5% 가 무작위 사고 지점이 되고(지속 3 step), 도로거리
+500 m 내 엣지 비용이 3배.  Static(출발 전 1회 계획) vs Online(매 step
+"현재 위치 → 남은 노드 → depot" open-path TSP 재계획) × solver 4종 = 8곡선,
+Monte Carlo 평균 + min-max 구름 + 마지막 구간 inset(평균선).
 
-지원 TSPLIB 포맷: EUC_2D, CEIL_2D, ATT, GEO, MAN_2D, MAX_2D, EXPLICIT (FULL_MATRIX, UPPER_ROW, LOWER_ROW, UPPER_DIAG_ROW, LOWER_DIAG_ROW). `.tsp`와 `.tsp.gz` 모두 지원.
+* 결과 (100 seeds, online 절감): **Proposed 1.8%** (재계획 총 0.13 s/run),
+  BF 1.2% (448 s/run), NN 3.6%, GA 0.1% — GA 는 재계획마다 무작위
+  재초기화(cold start)라 이득이 사실상 없음.
+* `--duration 1`(무기억 환경)이면 online ≈ static — 적응성엔 환경의 시간적
+  지속성이 필요.
 
-알려진 최적해가 있으면 자동으로 gap을 계산해 줍니다. 제약 조건이 있으면 exact constrained baseline과 자동 비교.
+### 데이터 (`data/`)
 
-## 솔버 단독 실행
+| 파일 | 내용 |
+|---|---|
+| `seongbuk.csv` | 성북구 도로거리행렬 (84×84, symmetric, m) |
+| `seongbuk_node_mapping.csv` | 노드 idx ↔ OSM node id·위경도 |
+| `seongbuk_drive.graphml` | 성북구 OSM 도로망 캐시 (실험 1 지도·경로용) |
+| `seongbuk_context.graphml` | 성북구 +1.2 km 버퍼 도로망 (setup figure 문맥용) |
+| `seongbuk_boundary.geojson` / `ku_campus.geojson` | 성북구 경계 / 고려대 캠퍼스 폴리곤 |
+| `sate_map.png` | 위성사진 (setup figure 상단 패널) |
 
-```bash
-# 기본 (무제약 vs 제약 vs Beam 비교)
-python tsp_factor_graph_gpu.py
-```
+### 문서
 
-## 시각화
+* `unified_note.pdf` — 알고리즘 유도 노트 (Sec. III 수식 대응).
 
-### 기본 (인터랙티브 뷰어)
+## 주요 검증
 
-```bash
-# N=10 도시, 50 iterations
-python visualize_bm.py --n 10 --iters 50
-
-# 키보드 조작:
-#   ← →   : iteration 이동
-#   Home   : 첫 iteration
-#   End    : 마지막 iteration
-#   q      : 종료
-```
-
-### 제약 조건
-
-```bash
-# 30% 도시에 랜덤 time window 제약 (기본)
-python visualize_bm.py --n 10 --constrained
-
-# 50% 도시에 제약
-python visualize_bm.py --n 10 --constrained --constraint-ratio 0.5
-```
-
-### Beam Search 시각화
-
-```bash
-# Beam 모드로 시각화
-python visualize_bm.py --n 25 --beam 500 --iters 30
-
-# Beam + 제약
-python visualize_bm.py --n 20 --beam 200 --constrained
-```
-
-### 저장
-
-```bash
-# PNG 프레임 (bm_frames/ 폴더에 저장)
-python visualize_bm.py --n 10 --iters 30 --save
-
-# GIF 애니메이션
-python visualize_bm.py --n 10 --iters 30 --gif
-```
-
-### GPU 지정
-
-```bash
-python visualize_bm.py --n 15 --device cuda
-python visualize_bm.py --n 15 --device mps
-python visualize_bm.py --n 15 --device cpu
-```
-
-## Python에서 직접 사용
-
-### Exact DP (N ≤ 20)
-
-```python
-import numpy as np
-from tsp_factor_graph_gpu import TSPFactorGraphSolverGPU
-
-D = np.random.rand(11, 11)
-np.fill_diagonal(D, 0)
-
-solver = TSPFactorGraphSolverGPU(D, start_city=0, damping=0.3, iters=100)
-route, cost = solver.run()
-print(route, cost)
-solver.cleanup()
-```
-
-### Beam Search (N > 20)
-
-```python
-D = np.random.rand(50, 50)
-np.fill_diagonal(D, 0)
-
-solver = TSPFactorGraphSolverGPU(
-    D, start_city=0, damping=0.3, iters=50,
-    beam_width=1000,  # top-1000 상태만 유지
-)
-route, cost = solver.run()
-print(f"Cost: {cost:.4f}")
-solver.cleanup()
-```
-
-### 제약 조건
-
-```python
-from tsp_factor_graph_gpu import TSPFactorGraphSolverGPU as Solver
-
-N_CITIES = 11
-N = N_CITIES - 1  # depot 제외
-D = np.random.rand(N_CITIES, N_CITIES)
-np.fill_diagonal(D, 0)
-
-cons = Solver.make_constraints(N)
-Solver.time_window(cons, city=2, earliest=0, latest=3)
-Solver.forbid(cons, city=5, time=0)
-Solver.penalize(cons, city=3, time=7, penalty=-10.0)
-Solver.precedence(cons, city_before=1, city_after=4)
-
-solver = Solver(D, start_city=0, constraints=cons, verbose=True)
-route, cost = solver.run()
-
-# Exact constrained baseline과 비교 (exact 모드에서만)
-exact_route, exact_cost = solver.solve_exact_constrained()
-print(f"BM: {cost:.4f}  Exact: {exact_cost:.4f}")
-solver.cleanup()
-```
-
-### 벤치마크 API
-
-```python
-from tsp_benchmarks import run_all_benchmarks, print_results
-import numpy as np
-
-D = np.random.rand(12, 12)
-np.fill_diagonal(D, 0)
-D = (D + D.T) / 2
-
-results = run_all_benchmarks(D, start=0, seed=42)
-opt = results['Held-Karp (Exact)'][1]
-print_results(results, optimal_cost=opt)
-```
-
-### 히스토리 기록
-
-```python
-solver = Solver(D, start_city=0, iters=50, verbose=False)
-route, cost = solver.run(record_history=True)
-
-h = solver.history
-print(f"Iterations: {len(h['cost'])}")
-print(f"Cost 추이: {h['cost']}")
-
-for i in range(1, len(h['cost'])):
-    ratio = np.abs(h['gamma'][i]).max() / max(np.abs(h['gamma'][i-1]).max(), 1e-15)
-    print(f"  iter {i+1}: γ̃ growth = {ratio:.2f}x")
-
-solver.cleanup()
-```
-
-## 제약 행렬 형식
-
-`constraints`는 `(N, N)` numpy 배열 (N = 도시 수, depot 제외).
-
-| 값 | 의미 |
-|----|------|
-| `0.0` | 허용 (기본) |
-| `-np.inf` | 금지 (hard constraint) |
-| 음수 (예: `-10.0`) | 페널티 (soft constraint) |
-
-- 행: 도시 인덱스 (depot 제외, 0-indexed)
-- 열: 시간 슬롯 (0 ~ N-1)
-
-## 메모리 참고
-
-### Exact DP
-
-| N | M=2^N | 피크 메모리 (float64) |
-|---|-------|----------------------|
-| 10 | 1,024 | ~5 MB |
-| 15 | 32,768 | ~300 MB |
-| 20 | 1,048,576 | ~2 GB |
-
-- N ≤ 15: GPU 8GB 이하 OK
-- N ≤ 20: GPU 24GB 필요
-- N > 20: Beam search 사용
-
-### Beam Search
-
-| N | beam_width | 피크 메모리 |
-|---|-----------|------------|
-| 30 | 1,000 | ~50 MB |
-| 50 | 1,000 | ~100 MB |
-| 50 | 5,000 | ~500 MB |
-
-Beam search는 N에 선형, B에 선형으로 메모리 증가. N=63까지 bitmask 지원.
+* δ̃ (식 43+45) 계산: 무작위 인스턴스 20개에서 부분집합×순열 전수조사와
+  정확히 일치 (오차 < 1e-9).
+* trellis 라우팅: brute force 와 모든 클러스터·모든 MC run 에서 0 mismatch
+  (둘 다 exact).
+* Algorithm 1: δ̃ damping γ=0.5 로 {b_ij} 고정점 수렴 (uniform Q=12 기준
+  6 라운드); γ=0 이면 undamped 원형.
