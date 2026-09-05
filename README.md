@@ -25,6 +25,55 @@ The three retained experiments are:
 
 ## Setup
 
+### Git LFS runtime input
+
+The 226 MB elevated SUMO network
+`simul/seongbuk_buffer_elevation.net.xml` is stored with Git Large File Storage
+(Git LFS). Install Git LFS before cloning so that Git replaces the small pointer
+in the repository with the actual XML file.
+
+On macOS:
+
+```bash
+brew install git-lfs
+git lfs install
+```
+
+On Windows, install Git LFS from [git-lfs.com](https://git-lfs.com/), open a
+new PowerShell or Git Bash session, and run:
+
+```powershell
+git lfs install
+```
+
+Then clone the repository normally. The final `git lfs pull` is harmless when
+the file was already downloaded automatically and ensures that it is present:
+
+```bash
+git clone https://github.com/shoreview01/TSP-FactorGraph.git
+cd TSP-FactorGraph
+git lfs pull
+```
+
+For an existing clone, install Git LFS and retrieve the runtime input with:
+
+```bash
+git lfs install
+git lfs pull
+```
+
+Verify that the network is managed by Git LFS:
+
+```bash
+git lfs ls-files
+```
+
+The output should include `simul/seongbuk_buffer_elevation.net.xml`. Prefer
+`git clone` over GitHub's **Download ZIP**, because a source archive may contain
+only the LFS pointer instead of the 226 MB XML file.
+
+### Python environment
+
 Use Python 3.11 or newer and install the dependencies:
 
 ```bash
