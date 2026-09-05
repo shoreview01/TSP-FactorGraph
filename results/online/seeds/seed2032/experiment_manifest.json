@@ -1,0 +1,43 @@
+{
+  "n_bins": 84,
+  "vehicles": 10,
+  "start_hour": 18,
+  "demand_seed": 7,
+  "traffic_seed": 2032,
+  "solver_seed": 7,
+  "traffic_steps_available": 121,
+  "max_simulation_minutes": 120.0,
+  "traffic_step_s": 60.0,
+  "replanning_interval_s": 300.0,
+  "traffic_model": "wall_clock_delayed_gradual_disruption",
+  "disruption_fraction": 0.05,
+  "disruption_radius_m": 500.0,
+  "minimum_speed_factor": 0.35,
+  "disruption_delay_s": 600.0,
+  "degradation_s": 600.0,
+  "disruption_hold_s": 600.0,
+  "recovery_s": 1500.0,
+  "methods": [
+    "proposed",
+    "nn",
+    "aco",
+    "pso",
+    "ga"
+  ],
+  "policies": [
+    "adaptive",
+    "static_live",
+    "static_frozen"
+  ],
+  "residual_nonempty_rule": "V_k remains nonempty only until physical vehicle k has served its first bin; already-used vehicles may be empty later",
+  "initial_plan_cache": "../../initial_plan_cache.json",
+  "computation_accounting": {
+    "planning_runtime_s": "oracle preparation plus solver wall time",
+    "latency_adjusted_time_s": "equal to operating makespan; planning is asynchronous",
+    "compute_wait_aux_energy_kwh": "zero; vehicles do not stop while the controller computes"
+  },
+  "execution_clock": "vehicles advance continuously on fixed traffic steps; active edges and services persist across step boundaries",
+  "replanning_projection": "unavoidable active-edge or active-service work is projected to its downstream decision state for route optimization, while physical execution itself is never teleported",
+  "incumbent_gate": true,
+  "replan_acceptance_tolerance_kwh": 1e-06
+}

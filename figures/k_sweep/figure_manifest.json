@@ -1,0 +1,32 @@
+{
+  "source": "results/k_sweep/k_sweep_3h_all_methods.csv",
+  "observations": 135,
+  "hours": [
+    4,
+    11,
+    19
+  ],
+  "vehicles": [
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14
+  ],
+  "methods": [
+    "proposed",
+    "nn",
+    "aco",
+    "pso",
+    "ga"
+  ],
+  "formats": [
+    "PDF",
+    "EPS",
+    "PNG"
+  ]
+}

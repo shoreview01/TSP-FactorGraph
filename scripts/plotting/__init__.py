@@ -1,0 +1,1 @@
+"""IEEE-style figure generators."""

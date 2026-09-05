@@ -1,0 +1,33 @@
+{
+  "n_bins": 84,
+  "seed": 7,
+  "hours": [
+    4,
+    11,
+    19
+  ],
+  "vehicles": [
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14
+  ],
+  "methods": [
+    "proposed",
+    "nn",
+    "aco",
+    "pso",
+    "ga"
+  ],
+  "target_total_demand_kg": 11700.0,
+  "observations": 135,
+  "all_feasible": true,
+  "all_exact_nonempty_k": true,
+  "proposed_mean_energy_optimum_k": 6,
+  "proposed_mean_energy_optimum_kwh": 107.10016032434321
+}

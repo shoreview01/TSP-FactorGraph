@@ -1,0 +1,20 @@
+{
+  "seed_count": 10,
+  "methods": [
+    "proposed",
+    "nn",
+    "aco",
+    "pso",
+    "ga"
+  ],
+  "formats": [
+    "PDF",
+    "EPS",
+    "PNG"
+  ],
+  "snapshot_total_energy_definition": "cumulative_energy_kwh - epoch_energy_kwh + planned_remaining_energy_kwh",
+  "snapshot_line": "arithmetic mean across traffic seeds",
+  "snapshot_cloud": "minimum-to-maximum across traffic seeds",
+  "energy_bar": "mean with one-standard-deviation error bars",
+  "latency_bar": "mean cumulative adaptive replanning wall time per run with one-standard-deviation error bars; initial planning excluded; inset enlarges Proposed, NN, and ACO"
+}

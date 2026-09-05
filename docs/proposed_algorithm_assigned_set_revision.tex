@@ -1,0 +1,286 @@
+\section{Proposed Algorithm}
+\label{sec:proposed}
+
+This section develops a vehicle-centric message-passing algorithm for solving \textbf{(P1)}. The key difficulty is that the assignment of an unserved bin cannot be evaluated independently of the route subsequently constructed by the assigned vehicle. In particular, adding a bin changes the visitation sequence, the accumulated waste load, and the physical time at which the remaining road segments are traversed. We represent the assignment decision and the state-dependent routing decision as two interacting components of a factor graph and exchange their local preferences through max-sum messages.
+
+For notational compactness, let $\mathcal{U}_{\tau}\equiv\mathcal{U}(\tau)$, $w_i\equiv w_i(\tau)$, and $q_k^{\tau}\equiv Q-\ell_k(\tau)$ throughout this section.
+
+\subsection{Factor-Graph Reformulation}
+\label{sec:factor-reformulation}
+
+For each $i\in\mathcal{U}_{\tau}$ and $k\in\mathcal{K}$, let $b_{ik}\in\{0,1\}$ indicate whether bin $i$ is assigned to vehicle $k$. Every unserved bin must be assigned to exactly one vehicle, while the total newly assigned waste must not exceed the remaining collection capacity of that vehicle. These two requirements are represented by local hard-constraint factors
+\begin{align}
+    I_i(\mathbf{b}_{i,:}) &=
+    \begin{cases}
+        0, & \sum_{k\in\mathcal{K}}b_{ik}=1\\
+        -\infty, & \text{otherwise}
+    \end{cases}
+    \label{eq:assignment-factor}\\
+    E_k(\mathbf{b}_{:,k}) &=
+    \begin{cases}
+        0, & \sum_{i\in\mathcal{U}_{\tau}}w_i b_{ik}\leq q_k^{\tau}\\
+        -\infty, & \text{otherwise}.
+    \end{cases}
+    \label{eq:capacity-factor}
+\end{align}
+Here, $\mathbf{b}_{i,:}=\{b_{ik}:k\in\mathcal{K}\}$ and $\mathbf{b}_{:,k}=\{b_{ik}:i\in\mathcal{U}_{\tau}\}$. A zero-valued factor leaves a feasible configuration unchanged, whereas $-\infty$ removes an infeasible configuration from the max-sum search.
+
+At coupling round $r$, the scalar assignment beliefs induce the decoded vehicle service sets
+\begin{align}
+    \widehat{\mathcal B}_k^{(r)}
+    =\left\{i\in\mathcal U_\tau:
+    k=\arg\max_{h\in\mathcal K}\widetilde\chi_{ih}^{(r)}\right\}.
+    \label{eq:decoded-service-set-revised}
+\end{align}
+A separate state-aware trellis is constructed for each vehicle over its decoded service set, rather than over the complete set $\mathcal U_\tau$. For an arbitrary set $\mathcal S\subseteq\mathcal U_\tau$, define the exact remaining route value of vehicle $k$ as
+\begin{align}
+ J_k(\mathcal S;\mathbf y_k(\tau),t_\tau)
+ =\min_{\mathbf r_k:\,\mathrm{visit}(\mathbf r_k)=\mathcal S}
+ \left[\sum_{h=0}^{|\mathcal S|}
+ C_{a_{k,h},a_{k,h+1}}(t_{k,h},\ell_{k,h})
+ +\sum_{h=1}^{|\mathcal S|}C_{a_{k,h}}^{\rm svc}\right],
+ \label{eq:route-value-oracle}
+\end{align}
+subject to the route-state recursions, the capacity constraint, the intermediate battery constraint, departure from $p_k(\tau)$, and return to the common depot $\mathsf d$. The time and battery states are updated after each visit using the corresponding service time and service energy. An infeasible route has value $+\infty$.
+
+Let $n=|\mathcal S|$. A state-aware trellis used to evaluate \eqref{eq:route-value-oracle} has state
+\begin{align}
+ \mathbf x_h^{(k,\mathcal S)}
+ =\bigl(\mathbf m_h,a_h,t_h,b_h\bigr),
+ \qquad \mathbf m_h\in\{0,1\}^{n},
+ \label{eq:local-trellis-state}
+\end{align}
+where the local mask indexes only the bins in $\mathcal S$. Every finite terminal state has visited all bins in $\mathcal S$ and returned to $\mathsf d$. Multiple nondominated time--battery labels are retained for a mask--location state. A label is discarded only if another label reaches the same state no later, with no less remaining battery energy and no greater route energy. Thus, the trellis returns an exact route for the specified vehicle state and service set.
+
+The assignment variables and the vehicle trellises must agree on the set of bins serviced by each vehicle. This consistency is imposed only on the terminal visitation mask through
+\begin{align}
+K_i^{(k)}(b_{ik},\mathbf{x}_R^{(k)})=
+\begin{cases}
+0, & b_{ik}=[\mathbf{m}_R^{(k)}]_i\\
+-\infty, & \text{otherwise}.
+\end{cases}
+\label{eq:bridge-factor}
+\end{align}
+The resulting unconstrained max-sum formulation is
+\begin{align}
+\textbf{(P2)}\quad
+\max_{\mathbf B,\{\mathbf{x}^{(k)}\}}\;
+&\sum_{i\in\mathcal{U}_{\tau}} I_i(\mathbf b_{i,:})
++\sum_{k\in\mathcal K}E_k(\mathbf b_{:,k}) \notag\\
+&+\sum_{k\in\mathcal K}\sum_{r=1}^{R}
+G_r^{(k)}(\mathbf{x}_{r-1}^{(k)},\mathbf{x}_r^{(k)}) \notag\\
+&+\sum_{i\in\mathcal{U}_{\tau}}\sum_{k\in\mathcal K}
+K_i^{(k)}(b_{ik},\mathbf{x}_R^{(k)}).
+\label{eq:factorized-problem}
+\end{align}
+
+For every feasible configuration, the factors $I_i$, $E_k$, and $K_i^{(k)}$ contribute zero, while the sum of the transition factors is exactly the negative battery energy consumed by the corresponding vehicle routes. Maximizing \textbf{(P2)} therefore yields the same assignment and routing solution as minimizing the total energy in \textbf{(P1)}. Importantly, the reformulation introduces no auxiliary assignment objective or weighting coefficient; all finite utilities originate from the physical energy model.
+
+\subsection{Max-Sum Message Passing}
+\label{sec:max-sum}
+
+Problem \textbf{(P2)} has a factorized structure in which each global constraint or routing interaction depends only on a limited subset of variables. Max-sum message passing exploits this locality by repeatedly exchanging functions between neighboring variable and factor nodes. Consider a generic variable node $z_j$ connected to a factor node $\mathcal{F}_a$. The variable-to-factor message aggregates all information received by $z_j$ except that originating from $\mathcal{F}_a$,
+\begin{align}
+    \mu_{z_j\rightarrow\mathcal{F}_a}(z_j)
+    =\sum_{b\in\mathcal{N}(j)\setminus a}
+    \mu_{\mathcal{F}_b\rightarrow z_j}(z_j),
+    \label{eq:generic-vf}
+\end{align}
+where $\mathcal{N}(j)$ denotes the neighboring factors of $z_j$. Conversely, the factor-to-variable message evaluates the best local configuration of $\mathcal{F}_a$ for a fixed value of $z_j$,
+\begin{align}
+    \mu_{\mathcal{F}_a\rightarrow z_j}(z_j)
+    =\max_{\mathbf z_a\setminus z_j}
+    \left[
+    \mathcal{F}_a(\mathbf z_a)
+    +\sum_{\ell\in\mathcal{N}(a)\setminus j}
+    \mu_{z_\ell\rightarrow\mathcal{F}_a}(z_\ell)
+    \right].
+    \label{eq:generic-fv}
+\end{align}
+Here, $\mathbf z_a$ denotes the variables incident on $\mathcal{F}_a$. Repeated application of \eqref{eq:generic-vf} and \eqref{eq:generic-fv} allows the assignment constraints and vehicle-specific routing costs to influence one another without constructing a centralized state space over the entire fleet.
+
+For each assignment variable $b_{ik}$, we denote the messages associated with $I_i$ by $\eta_{ik}$ and $\omega_{ik}$, those associated with $E_k$ by $\phi_{ik}$ and $\gamma_{ik}$, and those associated with $K_i^{(k)}$ by $\delta_i^{(k)}$ and $\rho_i^{(k)}$, as illustrated by
+\[
+I_i
+\;\xleftrightarrow[\omega_{ik}]{\eta_{ik}}\;
+b_{ik}
+\;\xleftrightarrow[\gamma_{ik}]{\phi_{ik}}\;
+E_k,
+\qquad
+b_{ik}
+\;\xleftrightarrow[\rho_i^{(k)}]{\delta_i^{(k)}}\;
+K_i^{(k)}.
+\]
+The factor $I_i$ compares the candidate vehicles competing for the same bin. Applying \eqref{eq:generic-fv} gives
+\begin{align}
+    \eta_{ik}(b_{ik})
+    =\max_{\mathbf b_{i,:}\setminus b_{ik}}
+    \left[
+    I_i(\mathbf b_{i,:})
+    +\sum_{k'\neq k}\omega_{ik'}(b_{ik'})
+    \right].
+    \label{eq:eta-full}
+\end{align}
+Likewise, $E_k$ evaluates whether bin $i$ can be admitted while accounting for the other bins currently competing for the remaining capacity of vehicle $k$,
+\begin{align}
+    \phi_{ik}(b_{ik})
+    =\max_{\mathbf b_{:,k}\setminus b_{ik}}
+    \left[
+    E_k(\mathbf b_{:,k})
+    +\sum_{j\neq i}\gamma_{jk}(b_{jk})
+    \right].
+    \label{eq:phi-full}
+\end{align}
+Since $b_{ik}$ has no local utility other than its incident factors, the message sent toward the routing bridge excludes $\delta_i^{(k)}$ and is
+\begin{align}
+    \rho_i^{(k)}(b_{ik})=\eta_{ik}(b_{ik})+\phi_{ik}(b_{ik}).
+    \label{eq:rho-full}
+\end{align}
+
+The bridge transfers this assignment preference to the terminal state of vehicle $k$. Let $\lambda_i^{(k)}(\mathbf{x}_R^{(k)})$ denote the message from $K_i^{(k)}$ toward the terminal trellis state. Because \eqref{eq:bridge-factor} permits only the assignment value consistent with the terminal mask,
+\begin{align}
+    \lambda_i^{(k)}(\mathbf{x}_R^{(k)})
+    =\rho_i^{(k)}\!\left([\mathbf m_R^{(k)}]_i\right).
+    \label{eq:lambda-full}
+\end{align}
+In the opposite direction, let $\psi_R^{(k)}(\mathbf{x}_R^{(k)})$ denote the routing utility accumulated through the trellis and define
+\begin{align}
+    \zeta_i^{(k)}(\mathbf{x}_R^{(k)})
+    =\psi_R^{(k)}(\mathbf{x}_R^{(k)})
+    +\sum_{j\neq i}\lambda_j^{(k)}(\mathbf{x}_R^{(k)}).
+    \label{eq:zeta-full}
+\end{align}
+The routing-to-assignment message is then obtained by maximizing over terminal trellis states consistent with the prescribed value of $b_{ik}$,
+\begin{align}
+    \delta_i^{(k)}(b_{ik})
+    =\max_{\mathbf{x}_R^{(k)}:\,[\mathbf m_R^{(k)}]_i=b_{ik}}
+    \zeta_i^{(k)}(\mathbf{x}_R^{(k)}).
+    \label{eq:delta-full}
+\end{align}
+Accordingly, the message returned by vehicle $k$ does not describe the cost of a single edge or a local insertion in isolation. It compares complete feasible routes whose terminal masks respectively include or exclude bin $i$, and therefore captures the effect of that assignment on the subsequent load, time, and battery evolution of the vehicle.
+
+\subsection{Scalar Message Updates}
+\label{sec:scalar-messages}
+
+The messages associated with $b_{ik}$ have only two values because $b_{ik}$ is binary. Maintaining both values is unnecessary for max-sum decisions, which depend only on their relative difference. For any binary message $\mu_{ik}$, define
+\begin{align}
+    \widetilde{\mu}_{ik}
+    =\mu_{ik}(1)-\mu_{ik}(0).
+    \label{eq:scalar-definition}
+\end{align}
+Under this representation, the exclusivity message in \eqref{eq:eta-full} simplifies to
+\begin{align}
+    \widetilde{\eta}_{ik}
+    =-\max_{k'\neq k}\widetilde{\omega}_{ik'}.
+    \label{eq:eta-update}
+\end{align}
+
+The capacity message requires a constrained subset maximization. Define $r_{jk}=\max(0,\widetilde{\gamma}_{jk})$ and, excluding bin $i$, let
+\begin{align}
+    P_k^{-i}(L)
+    \triangleq
+    \max_{\{x_j\}}
+    &\sum_{j\neq i}r_{jk}x_j \notag\\
+    \text{subject to}\quad
+    &\sum_{j\neq i}w_jx_j\leq L,\quad x_j\in\{0,1\}.
+    \label{eq:pareto-subproblem}
+\end{align}
+The required values of $P_k^{-i}(L)$ can be obtained from a Pareto frontier of the corresponding knapsack problem rather than solving each capacity level independently. The resulting scalar message is
+\begin{align}
+\widetilde{\phi}_{ik}=
+\begin{cases}
+P_k^{-i}(q_k^\tau-w_i)-P_k^{-i}(q_k^\tau), & w_i\leq q_k^\tau\\
+-\infty, & \text{otherwise}.
+\end{cases}
+\label{eq:phi-update}
+\end{align}
+The remaining assignment-side messages follow directly from the variable-to-factor rule:
+\begin{align}
+    \widetilde{\omega}_{ik}
+    &=\widetilde{\phi}_{ik}+\widetilde{\delta}_i^{(k)}\\
+    \widetilde{\gamma}_{ik}
+    &=\widetilde{\eta}_{ik}+\widetilde{\delta}_i^{(k)}\\
+    \widetilde{\rho}_i^{(k)}
+    &=\widetilde{\eta}_{ik}+\widetilde{\phi}_{ik}.
+    \label{eq:scalar-assignment-updates}
+\end{align}
+Thus, $\widetilde{\rho}_i^{(k)}$ is the extrinsic preference supplied by the assignment constraints to vehicle $k$, whereas $\widetilde{\delta}_i^{(k)}$ carries the corresponding route-level preference in the opposite direction.
+
+Routing feedback is evaluated for every vehicle--bin pair. Let $\widehat{\mathcal B}_k^{(r)}$ be fixed during the routing update of round $r$. The complete-route values associated with assigning and not assigning bin $i$ to vehicle $k$ are
+\begin{align}
+ M_{k,i}^{(1,r)}
+ &=-J_k\!\left(\widehat{\mathcal B}_k^{(r)}\cup\{i\};
+                \mathbf y_k(\tau),t_\tau\right)\\
+ M_{k,i}^{(0,r)}
+ &=-J_k\!\left(\widehat{\mathcal B}_k^{(r)}\setminus\{i\};
+                \mathbf y_k(\tau),t_\tau\right).
+ \label{eq:assigned-set-max-marginals}
+\end{align}
+The raw scalar route-value feedback is
+\begin{align}
+ \widetilde\delta_{i,\mathrm{raw}}^{(k,r)}
+ =M_{k,i}^{(1,r)}-M_{k,i}^{(0,r)}.
+ \label{eq:assigned-set-delta}
+\end{align}
+For $i\notin\widehat{\mathcal B}_k^{(r)}$, this is the negative energy increase of optimally adding $i$ to vehicle $k$; for $i\in\widehat{\mathcal B}_k^{(r)}$, it is the negative energy saved by removing $i$. Each value therefore compares complete state-aware routes rather than a single edge or a fixed-order insertion. All $i\in\mathcal U_\tau$ are evaluated, while every individual trellis contains at most the current vehicle service set plus one bin.
+
+The routing feedback is damped before it is returned to the assignment layer,
+\begin{align}
+ \widetilde\delta_i^{(k,r)}
+ =\epsilon\widetilde\delta_{i,\mathrm{raw}}^{(k,r)}
+ +(1-\epsilon)\widetilde\delta_i^{(k,r-1)},
+ \qquad \epsilon\in(0,1].
+ \label{eq:assigned-set-damping}
+\end{align}
+The update in \eqref{eq:assigned-set-delta} is a block-coordinate max-sum route-value message evaluated around the current decoded assignment. Each route value is exact for its specified service set, although the loopy assignment--routing iterations do not guarantee the global optimum of the joint fleet problem.
+
+\subsection{Iterative Assignment and Routing}
+\label{sec:iterative-algorithm}
+
+The two sets of messages are updated iteratively. At each coupling round, the vehicle trellises first evaluate the route-value feedback around the current service sets. With this feedback fixed, the assignment messages are updated until their scalar values converge. The best feasible solution encountered during these iterations is retained because damping in a loopy graph does not require the energy of every intermediate decoded assignment to decrease. The local max-sum belief of $b_{ik}$ is
+\begin{align}
+    \widetilde{\chi}_{ik}
+    =\widetilde{\eta}_{ik}+\widetilde{\phi}_{ik}
+    +\widetilde{\delta}_i^{(k)},
+    \label{eq:assignment-belief}
+\end{align}
+and the current assignment of bin $i$ is decoded from the vehicle with the largest belief. Since independent marginal decisions in a loopy graph may occasionally violate a hard capacity factor, a capacity-feasible configuration maximizing the sum of the decoded beliefs is used only when the direct belief decision is infeasible.
+
+Since assignment changes may abruptly alter the subset evaluated by a vehicle, damping is applied to the scalar messages,
+\begin{align}
+    \widetilde{\mu}^{(r)} = \epsilon\widetilde{\mu}_{\mathrm{raw}}^{(r)} + (1-\epsilon)\widetilde{\mu}^{(r-1)}, \quad \epsilon\in(0,1]. \label{eq:damping}
+\end{align}
+The complete update schedule is summarized in Algorithm~\ref{alg:assigned-set-vehicle-mp}.
+
+\begin{algorithm}
+\caption{Vehicle Assignment--Routing Message Passing}
+\label{alg:assigned-set-vehicle-mp}
+\begin{algorithmic}[1]
+\Require $\mathcal U_\tau$, $\{w_i\}$, $\{\mathbf y_k(\tau)\}$, $C_{uv}$, $D_{uv}$, $\epsilon$, $R_{\max}$
+\Ensure $\{\mathcal B_k(\tau)\}$ and $\{\mathbf r_k(\tau)\}$
+\State Initialize $\{\widehat{\mathcal B}_k^{(0)}\}$, the scalar messages, and the incumbent
+\For{$r=1,\ldots,R_{\max}$}
+ \ForAll{$k\in\mathcal K$ \textbf{ in parallel}}
+  \State Compute $\{\widetilde\delta_{i,\mathrm{raw}}^{(k,r)}\}_{i\in\mathcal U_\tau}$ using \eqref{eq:assigned-set-max-marginals}--\eqref{eq:assigned-set-delta}
+ \EndFor
+ \State Damp $\widetilde\delta_i^{(k,r)}$ using \eqref{eq:assigned-set-damping}
+ \State Update the assignment messages using \eqref{eq:eta-update}--\eqref{eq:scalar-assignment-updates}
+ \State Decode $\{\widehat{\mathcal B}_k^{(r)}\}$ from \eqref{eq:assignment-belief} and update the incumbent
+ \If{the assignment and messages have converged}
+  \State \textbf{break}
+ \EndIf
+\EndFor
+\State Recover and return the incumbent routes
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Computational Complexity}
+\label{sec:complexity}
+
+Let $n_k^{(r)}=|\widehat{\mathcal B}_k^{(r)}|$ and let $L_k$ bound the number of nondominated time--battery labels retained at a mask--location state. A route-value computation over $n_k^{(r)}$ bins requires $\mathcal O(L_k(n_k^{(r)})^2 2^{n_k^{(r)}})$ operations. Since the routing update evaluates every vehicle--bin pair using a service set of at most $n_k^{(r)}+1$ bins, the routing work of one coupling round is upper bounded by
+\begin{align}
+ \mathcal O\!\left(\sum_{k\in\mathcal K}L_kN_\tau
+ \left(n_k^{(r)}+1\right)^2 2^{n_k^{(r)}}\right).
+ \label{eq:assigned-set-routing-complexity}
+\end{align}
+The exponential term is governed by a vehicle's current service-set size rather than by $N_\tau$. Route-value and physical-transition caches reuse repeated member sets and $(u,v,t,\ell)$ states, and the $K$ vehicle blocks are conditionally independent and can be evaluated in parallel.

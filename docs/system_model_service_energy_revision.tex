@@ -1,0 +1,22 @@
+% Add the following definitions after the travel-energy model C_{uv}(t,\ell).
+
+In addition to the energy consumed while travelling, a vehicle consumes energy while servicing a bin. Let $s_i$ denote the service time at bin $i$, $P^{\rm svc}$ the stationary auxiliary power, and $e_i^{\rm lc}$ the energy required for lifting and compaction. The service energy is
+\begin{align}
+C_i^{\rm svc}=e_i^{\rm lc}+P^{\rm svc}\frac{s_i}{3600}.
+\label{eq:service-energy}
+\end{align}
+
+Suppose that vehicle $k$ travels from its current location $u$ to bin $v$. After completing the service at $v$, its time, load, and battery states become
+\begin{align}
+t_{k,h+1}&=t_{k,h}+D_{uv}(t_{k,h})+s_v\\
+\ell_{k,h+1}&=\ell_{k,h}+w_v\\
+b_{k,h+1}&=b_{k,h}-C_{uv}(t_{k,h},\ell_{k,h})-C_v^{\rm svc}.
+\label{eq:service-state-update}
+\end{align}
+The return-to-depot transition has no collection-service term. The energy of route $\mathbf r_k=(a_{k,0},\ldots,a_{k,H_k+1})$, where $a_{k,0}=p_k(\tau)$ and $a_{k,H_k+1}=\mathsf d$, is therefore
+\begin{align}
+E_k(\mathbf r_k)=\sum_{h=0}^{H_k}C_{a_{k,h},a_{k,h+1}}(t_{k,h},\ell_{k,h})+\sum_{h=1}^{H_k}C_{a_{k,h}}^{\rm svc}.
+\label{eq:route-energy-with-service}
+\end{align}
+
+The simulation uses $s_i=120$ s, $P^{\rm svc}=2$ kW, and $e_i^{\rm lc}=0.12$ kWh for every bin, giving $C_i^{\rm svc}=0.1867$ kWh per collection. The en-route auxiliary power included in $C_{uv}(t,\ell)$ is set to 3 kW. Although the service-energy term is identical across complete solutions that collect every bin, the service time changes the traffic state of subsequent transitions and both service time and service energy affect battery and return feasibility.

@@ -1,0 +1,7 @@
+{
+  "config": "experiments\\k_sweep\\config.json",
+  "experiment": "k_sweep",
+  "completed_utc": "2026-09-04T15:07:32.279967+00:00",
+  "figures_only": true,
+  "parallel_jobs": 3
+}

@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "experiment": "k_sweep",
+  "description": "Three-hour exact-K sweep with 84 bins and 11,700 kg total demand.",
+  "instance": {
+    "n_bins": 84,
+    "seed": 7,
+    "target_total_demand_kg": 11700.0,
+    "hours": [4, 11, 19],
+    "vehicles": [6, 7, 8, 9, 10, 11, 12, 13, 14]
+  },
+  "methods": ["proposed", "nn", "aco", "pso", "ga"],
+  "solver": {
+    "max_rounds": 32,
+    "assignment_rounds": 24,
+    "damping": 0.5,
+    "tolerance": 0.001,
+    "improvement_tolerance": 1e-9,
+    "exact_global_limit": 14,
+    "maximum_exact_trellis_bins": 84,
+    "hypercube_radii": [1, 2, 4, 8, 12, 16, 24, 32],
+    "stagnation_patience": 8,
+    "canonicalize_vehicle_symmetry": true,
+    "symmetry_dual_path": true,
+    "vehicle_gauss_seidel": false,
+    "certified_route_messages": false,
+    "oracle_slots": 3
+  },
+  "baselines": {
+    "ga_population": 100,
+    "ga_generations": 500,
+    "pso_particles": 60,
+    "pso_iterations": 200,
+    "aco_ants": 60,
+    "aco_iterations": 150
+  },
+  "execution": {"parallel_jobs": 3},
+  "resume": true,
+  "output": {
+    "results": "results/k_sweep",
+    "figures": "figures/k_sweep"
+  }
+}

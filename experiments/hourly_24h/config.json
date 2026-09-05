@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "experiment": "hourly_24h",
+  "description": "Proposed and four baselines over traffic snapshots 00:00-23:00.",
+  "instance": {
+    "n_bins": 84,
+    "vehicles": 10,
+    "seed": 7,
+    "target_total_demand_kg": null,
+    "hours": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+  },
+  "methods": ["proposed", "nn", "aco", "pso", "ga"],
+  "solver": {
+    "max_rounds": 32,
+    "assignment_rounds": 24,
+    "damping": 0.5,
+    "tolerance": 0.001,
+    "improvement_tolerance": 1e-9,
+    "exact_global_limit": 14,
+    "maximum_exact_trellis_bins": 84,
+    "hypercube_radii": [1, 2, 4, 8, 12, 16, 24, 32],
+    "stagnation_patience": 8,
+    "canonicalize_vehicle_symmetry": true,
+    "symmetry_dual_path": true,
+    "vehicle_gauss_seidel": false,
+    "certified_route_messages": false,
+    "oracle_slots": 3
+  },
+  "baselines": {
+    "ga_population": 100,
+    "ga_generations": 500,
+    "pso_particles": 60,
+    "pso_iterations": 200,
+    "aco_ants": 60,
+    "aco_iterations": 150
+  },
+  "execution": {"parallel_jobs": 1},
+  "resume": true,
+  "output": {
+    "results": "results/hourly_24h",
+    "figures": "figures/hourly_24h",
+    "csv": "hourly_dual_path_with_baselines_seed7.csv"
+  }
+}

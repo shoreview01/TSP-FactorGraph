@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "experiment": "online",
+  "description": "Paired adaptive/static online experiment over ten traffic seeds.",
+  "instance": {
+    "n_bins": 84,
+    "vehicles": 10,
+    "start_hour": 18,
+    "demand_seed": 7,
+    "solver_seed": 7,
+    "traffic_seeds": [2026, 2027, 2028, 2029, 2030, 2031, 2032, 2033, 2034, 2035],
+    "initial_plan_cache": "results/online/initial_plan_cache.json"
+  },
+  "methods": ["proposed", "nn", "aco", "pso", "ga"],
+  "traffic": {
+    "max_simulation_minutes": 120.0,
+    "traffic_step_s": 60.0,
+    "replanning_interval_s": 300.0,
+    "disruption_fraction": 0.05,
+    "disruption_radius_m": 500.0,
+    "minimum_speed_factor": 0.35,
+    "disruption_delay_minutes": 10.0,
+    "degradation_minutes": 10.0,
+    "disruption_hold_minutes": 10.0,
+    "recovery_minutes": 25.0,
+    "replan_acceptance_tolerance_kwh": 1e-6
+  },
+  "solver": {
+    "max_rounds": 32,
+    "assignment_rounds": 24,
+    "damping": 0.5,
+    "tolerance": 0.001,
+    "improvement_tolerance": 1e-9,
+    "exact_global_limit": 14,
+    "maximum_exact_trellis_bins": 84,
+    "hypercube_radii": [1, 2, 4, 8, 12, 16, 24, 32],
+    "stagnation_patience": 8,
+    "canonicalize_vehicle_symmetry": true,
+    "symmetry_dual_path": true,
+    "vehicle_gauss_seidel": false,
+    "certified_route_messages": false,
+    "oracle_slots": 2
+  },
+  "baselines": {
+    "ga_population": 100,
+    "ga_generations": 500,
+    "pso_particles": 60,
+    "pso_iterations": 200,
+    "aco_ants": 60,
+    "aco_iterations": 150
+  },
+  "execution": {"parallel_jobs": 1},
+  "resume": true,
+  "output": {
+    "results": "results/online",
+    "figures": "figures/online"
+  }
+}

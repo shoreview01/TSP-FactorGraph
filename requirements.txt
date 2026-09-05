@@ -1,3 +1,5 @@
 numpy
 pandas
-torch
+scipy
+numba
+matplotlib

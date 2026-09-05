@@ -1,0 +1,7 @@
+{
+  "config": "experiments\\hourly_24h\\config.json",
+  "experiment": "hourly_24h",
+  "completed_utc": "2026-09-04T15:07:38.708516+00:00",
+  "figures_only": true,
+  "parallel_jobs": 1
+}
